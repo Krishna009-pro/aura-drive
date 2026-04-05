@@ -23,23 +23,24 @@ async def lifespan(app: FastAPI):
 # Initializing our FastAPI application with the lifespan manager
 app = FastAPI(lifespan=lifespan)
 
+from app.users import auth_backend, current_active_user, fastapi_users, User
+from app.schema import UserCreate, UserUpdate, UserRead, UserAuth
+
 @app.post("/uploadfile")
 async def upload_file(
     file: UploadFile = File(...),
     caption: str = Form(...),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user) # Require authentication
 ):
 
     temp_file_path = None
     try:
-        # Create a temporary file to store the uploaded file
-        # Fixed typo: os.path.splittext -> os.path.splitext
         suffix = os.path.splitext(file.filename)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file_path = temp_file.name
             shutil.copyfileobj(file.file, temp_file)
         
-        # Upload to ImageKit using the modern files.upload method
         with open(temp_file_path, "rb") as f:
             upload_result = image_kit.files.upload(
                 file=f,
@@ -48,20 +49,19 @@ async def upload_file(
                 use_unique_file_name=True
             )
 
-        # In the modern SDK, upload_result is usually a model with attributes
         if upload_result:
-            # Creating a new Post object using the data from the ImageKit response
+            # Associate the post with the current logged-in user
             post = Post(
                 caption = caption,
                 url = upload_result.url,
                 file_type = upload_result.file_type,
-                file_name = upload_result.name
+                file_name = upload_result.name,
+                user_id = user.id
             )
-            session.add(post) # Add to the session
-            await session.commit() # Save to the database
-            await session.refresh(post) # Refresh to get the auto-generated ID
+            session.add(post)
+            await session.commit()
+            await session.refresh(post)
             
-            # Return as a dictionary for safe serialization
             return {
                 "id": str(post.id),
                 "caption": post.caption,
@@ -72,12 +72,10 @@ async def upload_file(
             }
 
     except Exception as e:
-        # Log the error for debugging
         print(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     finally:
-        # Clean up the temporary file
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
@@ -86,13 +84,9 @@ async def upload_file(
 async def get_feed(
     session: AsyncSession = Depends(get_async_session)
 ):
-    # Querying the database for all posts, ordered by the newest first
     result = await session.execute(select(Post).order_by(Post.created_at.desc()))
-    
-    # Extracting the Post objects from the query result
     posts = [row[0] for row in result.all()] 
     
-    # Formatting the data for the response
     posts_data = []
     for post in posts:
         posts_data.append({
@@ -101,12 +95,17 @@ async def get_feed(
             "url": post.url,
             "file_type": post.file_type,
             "file_name": post.file_name,
-            "created_at": post.created_at
+            "created_at": post.created_at,
+            "user_id": post.user_id # Included user info
         })
-    return posts_data
+    return {"posts": posts_data }
 
 @app.delete("/posts/{post_id}")
-async def delete_post( post_id: str, session: AsyncSession = Depends(get_async_session)):
+async def delete_post( 
+    post_id: str, 
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user) # Only logged in users
+):
     try:
         post_uuid = uuid.UUID(post_id)
         
@@ -116,11 +115,22 @@ async def delete_post( post_id: str, session: AsyncSession = Depends(get_async_s
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         
+        # Check if the user is the owner or a superuser
+        if post.user_id != user.id and not user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this post")
+        
         await session.delete(post)
         await session.commit()
         
-        return {"sucess": True, "message": "Post deleted successfully"}
+        return {"success": True, "message": "Post deleted successfully"}
     
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
     
+app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"])
+app.include_router(fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"])
+app.include_router(fastapi_users.get_reset_password_router(), prefix="/auth", tags=["auth"])
+app.include_router(fastapi_users.get_verify_router(UserRead), prefix="/auth", tags=["auth"])
+app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"])
