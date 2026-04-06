@@ -80,7 +80,7 @@ IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/your_id
 Start the development server:
 
 ```bash
-python main.py
+uv run main.py
 ```
 The application will be available at [http://localhost:8000](http://localhost:8000).
 
