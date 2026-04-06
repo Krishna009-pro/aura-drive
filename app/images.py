@@ -17,11 +17,11 @@ from imagekitio import ImageKit
 load_dotenv()
 
 # Initialize the ImageKit client
-# The SDK uses these credentials to authorize our backend to 'write' files to your account.
+# The SDK uses your private key to authorize our backend to 'write' files to your account.
+# Note: public_key and url_endpoint are not used in the main ImageKit constructor in this version.
 image_kit = ImageKit(
-    private_key=os.getenv("IMAGEKIT_PRIVATE_KEY"),
-    public_key=os.getenv("IMAGEKIT_PUBLIC_KEY"),
-    url_endpoint=os.getenv("IMAGEKIT_URL_ENDPOINT")
+    private_key=os.getenv("IMAGEKIT_PRIVATE_KEY")
 )
+
 
 
