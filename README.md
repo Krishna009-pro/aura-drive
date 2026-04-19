@@ -1,5 +1,7 @@
 # 🌌 Aura Drive | Premium Cloud Storage
 
+![Aura Drive CI](https://github.com/Krishna009-pro/aura-drive/actions/workflows/ci.yml/badge.svg)
+
 A sleek, high-performance cloud storage and image management platform built with **FastAPI**, **SQLAlchemy**, and **ImageKit.io**.
 
 ![Aura Drive UI Mockup](https://placehold.co/1200x600/0f172a/f8fafc?text=AURA+DRIVE+DASHBOARD)
