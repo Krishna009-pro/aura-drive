@@ -4,10 +4,12 @@ This script initializes and runs the FastAPI server using Uvicorn.
 """
 
 import uvicorn
+import os
 
 if __name__ == "__main__":
-    # Start the Uvicorn server to host the FastAPI application
-    # 'app.app:app' refers to: [package].[module]:[FastAPI instance]
-    # host='localhost' and port=8000 define the server address
-    # reload=True enables auto-restart on code changes (useful for development)
-    uvicorn.run("app.app:app", host="localhost", port=8000, reload=True)
+    # Dynamically read the port from the environment variable (provided by most hosts)
+    # Default to 8000 for local development
+    port = int(os.getenv("PORT", 8000))
+    
+    # Use 0.0.0.0 as the host to allow the app to be reachable within a Docker container or server
+    uvicorn.run("app.app:app", host="0.0.0.0", port=port, reload=True)

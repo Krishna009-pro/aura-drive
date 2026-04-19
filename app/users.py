@@ -1,31 +1,12 @@
-"""
-User management and authentication configuration for Aura Drive.
+import os
+from dotenv import load_dotenv
 
-Architecture Notes:
-- **FastAPI Users**: An off-the-shelf library that handles the "messy" parts of auth, like 
-  password hashing, email verification, and token generation.
-- **JWT (JSON Web Token)**: We use JWTs for authentication. These are small, encrypted, 
-  tamper-proof strings that the backend gives to the frontend.
-- **Stateless Auth**: Since we use JWTs, the backend doesn't need to "remember" every user 
-  in memory. It just validates the incoming token on every request.
-"""
-
-from fastapi_users.authentication import AuthenticationBackend
-import uuid
-from typing import Optional
-from fastapi import Depends, Request
-from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, models
-from fastapi_users.authentication import (
-    AuthenticationBackend,
-    BearerTransport,
-    JWTStrategy
-)
-from fastapi_users.db import SQLAlchemyBaseUserTable
-from app.db import User, get_user_db
+# Load security environment variables
+load_dotenv()
 
 # SECRET: A string used to encrypt your JWT tokens. 
-# SECURITY: Never share this. If someone knows your secret, they can fake tokens for any user.
-SECRET = "oiwankdlnringnaa"
+# SECURITY: We now load this from a .env file to keep it out of the source code.
+SECRET = os.getenv("JWT_SECRET", "fallback-secret-key-for-local-dev-only")
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     """

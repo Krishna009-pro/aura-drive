@@ -17,8 +17,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from fastapi_users.db import SQLAlchemyUserDatabase, SQLAlchemyBaseUserTableUUID
 from fastapi import Depends
 
-# The URL for connecting to the SQLite database
-DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# The URL for connecting to the database. 
+# In production, this can be swapped for PostgreSQL via environment variables.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
 class Base(DeclarativeBase):
     """

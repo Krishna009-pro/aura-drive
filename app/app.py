@@ -42,6 +42,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Configure CORS (Cross-Origin Resource Sharing)
+# This is REQUIRED for production if your frontend and backend are hosted on different domains.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, replace with your specific deployment domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Serve static files (HTML, CSS, JS) from the 'static' directory
 # WHY: This allows the backend to host the frontend directly, making deployment simpler.
 app.mount("/static", StaticFiles(directory="static"), name="static")

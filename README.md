@@ -68,21 +68,41 @@ pip install -r requirements.txt
 ```
 
 ### 3. Environment Setup
-Create a `.env` file in the root directory with your ImageKit credentials:
+Create a `.env` file in the root directory. You can use the provided `.env.example` as a template:
 
 ```ini
 IMAGEKIT_PRIVATE_KEY=your_private_key
-IMAGEKIT_PUBLIC_KEY=your_public_key
-IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/your_id
+JWT_SECRET=your_secret_string
+DATABASE_URL=sqlite+aiosqlite:///./test.db
 ```
 
-### 4. Running the Server
+### 4. Running Locally
 Start the development server:
 
 ```bash
 uv run main.py
 ```
 The application will be available at [http://localhost:8000](http://localhost:8000).
+
+## 🚀 Deployment Guide
+Aura Drive is designed to be hosted on any platform that supports Docker or Python.
+
+### 🐳 Deploying with Docker (Recommended)
+The project includes a production-ready `Dockerfile`.
+
+1. **Build the image**:
+   ```bash
+   docker build -t aura-drive .
+   ```
+2. **Run the container**:
+   ```bash
+   docker run -p 8000:8000 --env-file .env aura-drive
+   ```
+
+### ☁️ Cloud Hosting (Render, Railway, Fly.io)
+1. **Connect Repository**: Point your host to this GitHub repository.
+2. **Set Environment Variables**: Add `IMAGEKIT_PRIVATE_KEY` and `JWT_SECRET` in your host's dashboard.
+3. **Database**: If using SQLite, ensure you mount a **Persistent Volume**. For high-traffic apps, simply change the `DATABASE_URL` to a managed **PostgreSQL** instance.
 
 ## 📡 API Endpoints
 
@@ -96,5 +116,5 @@ The application will be available at [http://localhost:8000](http://localhost:80
 
 ---
 
-> [!NOTE]
-> This project is designed for demonstration purposes. Ensure `SECRET` keys in `app/users.py` are moved to environment variables for production deployments.
+> [!TIP]
+> Always use a dedicated PostgreSQL database and a strong `JWT_SECRET` for production deployments to ensure data persistence and security.
