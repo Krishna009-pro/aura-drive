@@ -54,22 +54,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-STATIC_DIST_DIR = os.path.join("static", "dist")
-
-# Serve the compiled React frontend only when it exists locally.
-# On Vercel, the frontend is deployed separately, so this folder will not be present.
-if os.path.isdir(STATIC_DIST_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIST_DIR), name="static")
+# Serve the compiled React frontend from the 'static/dist' directory
+# WHY: This allows the backend to host the modern React app directly.
+# NOTE: You must run 'npm run build' in the frontend folder to generate this folder.
+app.mount("/static", StaticFiles(directory="static/dist"), name="static")
 
 @app.get("/")
 async def root():
     """
-    Return the frontend entrypoint when the built bundle exists locally.
-    Otherwise return a lightweight health response for Vercel backend deployments.
+    Redirect the root URL to the React index.html.
     """
-    if os.path.isdir(STATIC_DIST_DIR):
-        return RedirectResponse(url="/static/index.html")
-    return {"status": "ok"}
+    return RedirectResponse(url="/static/index.html")
 
 @app.post("/uploadfile")
 async def upload_file(

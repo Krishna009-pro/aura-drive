@@ -23,16 +23,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-IS_VERCEL = os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
-
-# The URL for connecting to the database.
-# Local development can fall back to SQLite, but hosted Vercel deployments
-# must provide a persistent PostgreSQL DATABASE_URL.
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    if IS_VERCEL:
-        raise RuntimeError("DATABASE_URL is required when running on Vercel.")
-    DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+# The URL for connecting to the database. 
+# In production, this can be swapped for PostgreSQL via environment variables.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
 # Render and SQLAlchemy compatibility fix:
 # 1. Render provides 'postgres://', but SQLAlchemy 2.0 requires 'postgresql://'

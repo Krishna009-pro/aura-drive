@@ -18,12 +18,7 @@ load_dotenv()
 
 # SECRET: A string used to encrypt your JWT tokens. 
 # SECURITY: We now load this from a .env file to keep it out of the source code.
-IS_VERCEL = os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
-SECRET = os.getenv("JWT_SECRET")
-if not SECRET:
-    if IS_VERCEL:
-        raise RuntimeError("JWT_SECRET is required when running on Vercel.")
-    SECRET = "fallback-secret-key-for-local-dev-only"
+SECRET = os.getenv("JWT_SECRET", "fallback-secret-key-for-local-dev-only")
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     """
@@ -79,4 +74,4 @@ fastapi_users = FastAPIUsers(
 # current_active_user: A helper that we can use in any route to find out 
 # who is making the request. It automatically validates the JWT token.
 current_active_user = fastapi_users.current_user(active=True)
-
+
