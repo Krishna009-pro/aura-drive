@@ -6,7 +6,8 @@ Architecture Notes:
 - **Asynchrony**: Every route is 'async', meaning the server doesn't wait for one request to finish before starting another—it "pauses" during slow I/O (like database or network calls), allowing for much higher performance.
 """
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends 
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends
+from fastapi.middleware.cors import CORSMiddleware 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession

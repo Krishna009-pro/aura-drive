@@ -17,7 +17,7 @@ A sleek, high-performance cloud storage and image management platform built with
 
 ## 🛠️ Tech Stack
 
-- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.14+)
+- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.12+)
 - **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/) with `aiosqlite`
 - **Auth**: [FastAPI Users](https://fastapi-users.github.io/fastapi-users/)
 - **Cloud Storage**: [ImageKit.io](https://imagekit.io/)
@@ -43,7 +43,7 @@ FastApi_Project/
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- Python 3.14 or higher
+- Python 3.12 or higher
 - An [ImageKit.io](https://imagekit.io/) account
 
 ### 2. Architecture Deep Dive
@@ -101,10 +101,24 @@ The project includes a production-ready `Dockerfile`.
    docker run -p 8000:8000 --env-file .env aura-drive
    ```
 
-### ☁️ Cloud Hosting (Render, Railway, Fly.io)
+### ☁️ Cloud Hosting (Render)
+Aura Drive is pre-configured for **Render** via the included `render.yaml` blueprint.
+
+1. **Upload your code** to GitHub.
+2. **On Render**, go to **Blueprints** and connect your repository.
+3. Render will automatically provision:
+   - A **FastAPI Web Service** (Dockerized).
+   - A **Managed PostgreSQL** database.
+4. Set the following **Environment Variables** in the Render dashboard:
+   - `IMAGEKIT_PRIVATE_KEY`: Your private key from ImageKit.io.
+   - `JWT_SECRET`: A long random string for auth security (Render will generate one if left blank).
+   - `PORT`: 8000 (Set by default in the blueprint).
+
+### ☁️ Other Platforms (Railway, Fly.io)
 1. **Connect Repository**: Point your host to this GitHub repository.
-2. **Set Environment Variables**: Add `IMAGEKIT_PRIVATE_KEY` and `JWT_SECRET` in your host's dashboard.
-3. **Database**: If using SQLite, ensure you mount a **Persistent Volume**. For high-traffic apps, simply change the `DATABASE_URL` to a managed **PostgreSQL** instance.
+2. **Set Environment Variables**: Add `IMAGEKIT_PRIVATE_KEY` and `JWT_SECRET`.
+3. **Database**: Change the `DATABASE_URL` to your managed **PostgreSQL** instance connection string.
+
 
 ## 📡 API Endpoints
 

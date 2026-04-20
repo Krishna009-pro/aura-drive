@@ -1,0 +1,29 @@
+services:
+  # --- The FastAPI Web Service ---
+  - type: web
+    name: aura-drive-api
+    runtime: docker
+    plan: free # Free tier plan
+    region: oregon # Closest to most users
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aura-drive-db
+          property: connectionString
+      # --- ImageKit Credentials (Add these manually in Render dashboard for security) ---
+      - key: IMAGEKIT_PRIVATE_KEY
+        sync: false
+      - key: IMAGEKIT_PUBLIC_KEY
+        sync: false
+      - key: IMAGEKIT_URL_ENDPOINT
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true # Generates a random secret for security
+
+databases:
+  # --- The Managed PostgreSQL Database ---
+  - name: aura-drive-db
+    plan: free
+    region: oregon
+    databaseName: auradrive
+    user: aura_admin

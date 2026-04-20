@@ -27,6 +27,14 @@ load_dotenv()
 # In production, this can be swapped for PostgreSQL via environment variables.
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
+# Render and SQLAlchemy compatibility fix:
+# 1. Render provides 'postgres://', but SQLAlchemy 2.0 requires 'postgresql://'
+# 2. For async calls, we need the '+asyncpg' driver suffix.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 class Base(DeclarativeBase):
     """
     Base class for all database models.
@@ -61,7 +69,17 @@ class Post(Base):
 
 # engine: The main entry point for the database connection.
 # echo=True: Logs every SQL query generated to your console (great for learning/debugging).
-engine = create_async_engine(DATABASE_URL, echo=True)
+if "sqlite" in DATABASE_URL:
+    engine = create_async_engine(DATABASE_URL, echo=True)
+else:
+    # For PostgreSQL, we add some connection pooling settings for better performance on Render.
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=True,
+        pool_pre_ping=True, # Automatically reconnects if the cloud database times out
+        pool_size=5,        # Keeps 5 connections ready to use
+        max_overflow=10     # Allows 10 extra temporary connections during bursts
+    )
 
 # async_session_maker: A factory that creates new database sessions for each request.
 # expire_on_commit=False: Prevents objects from being detached after a commit, 
