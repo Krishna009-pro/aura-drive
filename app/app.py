@@ -46,25 +46,37 @@ app = FastAPI(
 
 # Configure CORS (Cross-Origin Resource Sharing)
 # This is REQUIRED for production if your frontend and backend are hosted on different domains.
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+if not cors_origins:
+    cors_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with your specific deployment domain
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX"),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serve the compiled React frontend from the 'static/dist' directory
-# WHY: This allows the backend to host the modern React app directly.
-# NOTE: You must run 'npm run build' in the frontend folder to generate this folder.
-app.mount("/static", StaticFiles(directory="static/dist"), name="static")
+serve_static_frontend = os.getenv("SERVE_STATIC_FRONTEND", "0") == "1"
+static_dist_dir = "static/dist"
+if serve_static_frontend and os.path.isdir(static_dist_dir):
+    app.mount("/static", StaticFiles(directory=static_dist_dir), name="static")
 
 @app.get("/")
 async def root():
     """
-    Redirect the root URL to the React index.html.
+    API health endpoint by default.
+    Optionally redirects to the bundled frontend when SERVE_STATIC_FRONTEND=1.
     """
-    return RedirectResponse(url="/static/index.html")
+    if serve_static_frontend and os.path.isdir(static_dist_dir):
+        return RedirectResponse(url="/static/index.html")
+    return {"status": "ok", "service": "Aura Drive API"}
 
 @app.post("/uploadfile")
 async def upload_file(

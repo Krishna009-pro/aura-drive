@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/';
+
 const api = axios.create({
-    baseURL: '/',
+    baseURL: API_BASE_URL,
 });
 
 // Automatically add the JWT token to every request if it exists
