@@ -1,9 +1,9 @@
 # --- STAGE 1: Build the React Frontend ---
 FROM node:18-slim AS build-stage
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
+WORKDIR /app/new_frontend
+COPY new_frontend/package*.json ./
 RUN npm install
-COPY frontend/ .
+COPY new_frontend/ .
 RUN npm run build
 
 # --- STAGE 2: Build the FastAPI Backend ---

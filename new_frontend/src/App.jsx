@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LogOut, Upload, Trash2, Folder, ShieldCheck, Mail, 
-  Lock, Plus, File, Globe, User as UserIcon, LayoutGrid 
+import {
+  LogOut, Upload, Trash2, Folder, ShieldCheck, Mail,
+  Lock, Plus, File, Globe, User as UserIcon, EyeOff, Download
 } from 'lucide-react';
 import { authApi, driveApi } from './api';
 
 function App() {
+  const Motion = motion;
   const [token, setToken] = useState(localStorage.getItem('aura_token'));
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  
+
   // App view state
   const [feedMode, setFeedMode] = useState('private'); // 'private' or 'public'
-  
+  const [userEmail, setUserEmail] = useState(localStorage.getItem('aura_email') || '');
+
   // Auth state
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -25,26 +27,38 @@ function App() {
   const [caption, setCaption] = useState('');
   const [isPublic, setIsPublic] = useState(false);
 
-  useEffect(() => {
-    if (token) {
-      loadFeed();
-    }
-  }, [token, feedMode]);
-
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const loadFeed = async () => {
+  const logout = useCallback(() => {
+    localStorage.removeItem('aura_token');
+    localStorage.removeItem('aura_token_id_hack');
+    localStorage.removeItem('aura_email');
+    setToken(null);
+    setUserEmail('');
+    setPosts([]);
+  }, []);
+
+  const loadFeed = useCallback(async () => {
     try {
       const res = await driveApi.getFeed(feedMode);
       setPosts(res.data.posts || []);
-    } catch (err) {
-      console.error(err);
-      if (err.response?.status === 401) logout();
+    } catch (error) {
+      console.error(error);
+      if (error.response?.status === 401) logout();
     }
-  };
+  }, [feedMode, logout]);
+
+  useEffect(() => {
+    if (token) {
+      const timer = window.setTimeout(() => {
+        loadFeed();
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [token, loadFeed]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -53,11 +67,13 @@ function App() {
       if (authMode === 'login') {
         const res = await authApi.login(email, password);
         localStorage.setItem('aura_token', res.data.access_token);
-        
+
         // Fetch user details to get the persistent ID for delete permissions
         const userRes = await authApi.me();
         localStorage.setItem('aura_token_id_hack', userRes.data.id);
-        
+        localStorage.setItem('aura_email', userRes.data.email);
+
+        setUserEmail(userRes.data.email);
         setToken(res.data.access_token);
         showNotification('Welcome to Aura Drive');
       } else {
@@ -65,17 +81,12 @@ function App() {
         showNotification('Registration successful! Please login.');
         setAuthMode('login');
       }
-    } catch (err) {
-      showNotification(err.response?.data?.detail || 'Authentication failed', 'error');
+    } catch (error) {
+      console.error(error);
+      showNotification(error.response?.data?.detail || 'Authentication failed', 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('aura_token');
-    setToken(null);
-    setPosts([]);
   };
 
   const handleUpload = async () => {
@@ -88,7 +99,8 @@ function App() {
       setCaption('');
       setIsPublic(false);
       loadFeed();
-    } catch (err) {
+    } catch (error) {
+      console.error(error);
       showNotification('Upload failed', 'error');
     } finally {
       setLoading(false);
@@ -96,35 +108,68 @@ function App() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this asset permanently?')) return;
+    if (!window.confirm('PERMANENT DELETE: This will erase the file from both your vault and the community. Continue?')) return;
     try {
       await driveApi.deletePost(id);
-      showNotification('Asset removed');
+      showNotification('Asset erased permanently');
       loadFeed();
-    } catch (err) {
+    } catch (error) {
+      console.error(error);
       showNotification('Delete failed', 'error');
     }
   };
 
+  const handleVisibilityToggle = async (id, currentStatus) => {
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'Sharing with community...' : 'Moving to private vault...';
+    try {
+      showNotification(action);
+      await driveApi.updateVisibility(id, newStatus);
+      showNotification(newStatus ? 'Asset is now Public' : 'Asset is now Private');
+      loadFeed();
+    } catch (error) {
+      console.error(error);
+      showNotification('Visibility update failed', 'error');
+    }
+  };
+
+  const handleDownload = (url, fileName) => {
+    // We use the ik-attachment=true parameter to force ImageKit to trigger a download
+    const downloadUrl = `${url}?ik-attachment=true`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName || 'aura-asset';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification('Download started');
+  };
+
+  const currentUserId = localStorage.getItem('aura_token_id_hack');
+
   return (
     <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem 2rem' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 0', marginBottom: '2rem' }}>
-        <motion.div 
+        <Motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           style={{ fontSize: '1.6rem', fontWeight: 700, background: 'linear-gradient(to right, #818cf8, #c084fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
         >
           AURA DRIVE
-        </motion.div>
+        </Motion.div>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
           {token && (
             <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', borderRadius: '10px' }}>
+                <UserIcon size={14} />
+                {userEmail}
+              </div>
               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '0.25rem' }}>
-                <button 
+                <button
                   onClick={() => setFeedMode('private')}
-                  className="btn" 
-                  style={{ 
-                    padding: '0.5rem 1rem', 
+                  className="btn"
+                  style={{
+                    padding: '0.5rem 1rem',
                     fontSize: '0.85rem',
                     background: feedMode === 'private' ? 'var(--accent-color)' : 'transparent',
                     color: feedMode === 'private' ? 'white' : 'var(--text-secondary)'
@@ -132,11 +177,11 @@ function App() {
                 >
                   <Lock size={14} /> My Vault
                 </button>
-                <button 
+                <button
                   onClick={() => setFeedMode('public')}
-                  className="btn" 
-                  style={{ 
-                    padding: '0.5rem 1rem', 
+                  className="btn"
+                  style={{
+                    padding: '0.5rem 1rem',
                     fontSize: '0.85rem',
                     background: feedMode === 'public' ? 'var(--accent-color)' : 'transparent',
                     color: feedMode === 'public' ? 'white' : 'var(--text-secondary)'
@@ -155,7 +200,7 @@ function App() {
 
       <AnimatePresence mode="wait">
         {!token ? (
-          <motion.div 
+          <Motion.div
             key="auth"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -165,13 +210,13 @@ function App() {
           >
             <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
               {['login', 'register'].map(mode => (
-                <span 
+                <span
                   key={mode}
                   onClick={() => setAuthMode(mode)}
                   style={{ cursor: 'pointer', fontWeight: 600, fontSize: '1.1rem', color: authMode === mode ? 'var(--text-primary)' : 'var(--text-secondary)', position: 'relative' }}
                 >
                   {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                  {authMode === mode && <motion.div layoutId="underline" style={{ position: 'absolute', bottom: -5, left: 0, width: '100%', height: '3px', background: 'var(--accent-color)', borderRadius: '4px' }} />}
+                  {authMode === mode && <Motion.div layoutId="underline" style={{ position: 'absolute', bottom: -5, left: 0, width: '100%', height: '3px', background: 'var(--accent-color)', borderRadius: '4px' }} />}
                 </span>
               ))}
             </div>
@@ -195,9 +240,9 @@ function App() {
                 {loading ? 'Processing...' : 'Continue'}
               </button>
             </form>
-          </motion.div>
+          </Motion.div>
         ) : (
-          <motion.div 
+          <Motion.div
             key="dashboard"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -208,16 +253,16 @@ function App() {
                 <h2 style={{ marginBottom: '0.5rem' }}>Cloud Deposit</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Securely upload and manage your premium assets.</p>
                 <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div 
+                  <div
                     onClick={() => setIsPublic(!isPublic)}
-                    style={{ 
-                      width: '40px', height: '24px', background: isPublic ? 'var(--accent-color)' : 'rgba(255,255,255,0.1)', 
+                    style={{
+                      width: '40px', height: '24px', background: isPublic ? 'var(--accent-color)' : 'rgba(255,255,255,0.1)',
                       borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: '0.3s'
                     }}
                   >
-                    <motion.div 
+                    <Motion.div
                       animate={{ x: isPublic ? 18 : 2 }}
-                      style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', marginTop: '2px' }} 
+                      style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', marginTop: '2px' }}
                     />
                   </div>
                   <span style={{ fontSize: '0.9rem', color: isPublic ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
@@ -226,7 +271,7 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div 
+                <div
                   onClick={() => document.getElementById('file-input').click()}
                   style={{ border: '2px dashed var(--glass-border)', padding: '1.5rem', borderRadius: '15px', textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }}
                 >
@@ -250,85 +295,122 @@ function App() {
                 {feedMode === 'public' ? 'Community Gallery' : 'Personal Vault'}
               </h2>
               <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                {posts.length} {posts.length === 1 ? 'Asset' : 'Assets'} 
+                {posts.length} {posts.length === 1 ? 'Asset' : 'Assets'}
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '2rem' }}>
               <AnimatePresence>
-                {posts.map((post, index) => (
-                  <motion.div 
-                    layout
-                    key={post.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="glass-card"
-                    style={{ overflow: 'hidden', cursor: 'default' }}
-                  >
-                    <div style={{ height: '180px', overflow: 'hidden', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                      {post.file_type?.startsWith('image') ? (
-                        <img src={post.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Asset" />
-                      ) : (
-                        <File size={48} style={{ color: 'var(--text-secondary)' }} />
-                      )}
-                      {post.is_public && feedMode === 'private' && (
-                        <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'var(--accent-color)', borderRadius: '50%', padding: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-                          <Globe size={12} color="white" />
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ padding: '1.2rem' }}>
-                      <div style={{ fontWeight: 600, fontSize: '1.05rem', marginBottom: '0.5rem' }}>{post.caption || 'Untitled Asset'}</div>
-                      
-                      {feedMode === 'public' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', background: 'rgba(255,255,255,0.04)', padding: '0.4rem 0.6rem', borderRadius: '8px', width: 'fit-content' }}>
-                          <UserIcon size={12} />
-                          {post.uploader_email}
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                        {/* Only show delete button if it's the user's private vault OR they are the owner in public feed */}
-                        {(feedMode === 'private' || post.user_id === localStorage.getItem('aura_token_id_hack')) && (
-                          <Trash2 
-                            size={16} 
-                            onClick={() => handleDelete(post.id)}
-                            style={{ cursor: 'pointer', color: 'var(--error)', transition: 'transform 0.2s' }} 
-                          />
+                {posts.map((post, index) => {
+                  const isOwner = post.user_id === currentUserId;
+                  return (
+                    <Motion.div
+                      layout
+                      key={post.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="glass-card"
+                      style={{ overflow: 'hidden', cursor: 'default' }}
+                    >
+                      <div style={{ height: '180px', overflow: 'hidden', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                        {post.file_type?.startsWith('image') ? (
+                          <img src={post.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Asset" />
+                        ) : (
+                          <File size={48} style={{ color: 'var(--text-secondary)' }} />
+                        )}
+                        {post.is_public && feedMode === 'private' && (
+                          <div title="Shared with community" style={{ position: 'absolute', top: '10px', right: '10px', background: 'var(--accent-color)', borderRadius: '50%', padding: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+                            <Globe size={12} color="white" />
+                          </div>
                         )}
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                      <div style={{ padding: '1.2rem' }}>
+                        <div style={{ fontWeight: 600, fontSize: '1.05rem', marginBottom: '0.5rem' }}>{post.caption || 'Untitled Asset'}</div>
+
+                        {feedMode === 'public' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', background: 'rgba(255,255,255,0.04)', padding: '0.4rem 0.6rem', borderRadius: '8px', width: 'fit-content' }}>
+                            <UserIcon size={12} />
+                            {post.uploader_email}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          <span>{new Date(post.created_at).toLocaleDateString()}</span>
+
+                          {/* Owner Actions */}
+                          {isOwner && (
+                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                              {/* Download */}
+                              <button
+                                onClick={() => handleDownload(post.url, post.file_name)}
+                                title="Download Asset"
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0 }}
+                              >
+                                <Download size={16} />
+                              </button>
+
+                              {/* Unshare / Share Toggle */}
+                              <button
+                                onClick={() => handleVisibilityToggle(post.id, post.is_public)}
+                                title={post.is_public ? "Remove from Community" : "Share with Community"}
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0 }}
+                              >
+                                {post.is_public ? <EyeOff size={16} /> : <Globe size={16} />}
+                              </button>
+
+                              {/* Permanent delete is only available from the personal vault */}
+                              {feedMode === 'private' ? (
+                                <button
+                                  onClick={() => handleDelete(post.id)}
+                                  title="Delete Permanently"
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0 }}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleVisibilityToggle(post.id, post.is_public)}
+                                  title="Remove from Community"
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0 }}
+                                >
+                                  <EyeOff size={16} />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </Motion.div>
+                  );
+                })}
               </AnimatePresence>
               {posts.length === 0 && (
                 <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
                   <Folder size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                  <p>{feedMode === 'public' ? 'No community assets found yet.' : 'Your vault is currently empty.'}</p>
+                  <p>{feedMode === 'public' ? 'No community assets shared yet.' : 'Your vault is currently empty.'}</p>
                 </div>
               )}
             </div>
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {notification && (
-          <motion.div 
+          <Motion.div
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            style={{ 
-              position: 'fixed', bottom: '2rem', right: '2rem', 
+            style={{
+              position: 'fixed', bottom: '2rem', right: '2rem',
               padding: '1rem 2rem', borderRadius: '12px', background: notification.type === 'error' ? 'var(--error)' : 'var(--success)',
               color: 'white', fontWeight: 600, boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 1000
             }}
           >
             {notification.message}
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>

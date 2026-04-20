@@ -7,7 +7,7 @@ Architecture Notes:
 - **SQLAlchemy 2.0**: We use the modern Declarative model style for better type hinting and cleaner code.
 """
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, inspect, text
 from typing import AsyncGenerator
 import uuid 
 from datetime import datetime
@@ -49,6 +49,7 @@ class Post(Base):
     __tablename__ = "posts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_id = Column(String, nullable=False, unique=True, index=True)
 
     # user_id: Links this post to a specific user. 
     # ForeignKey ensures that we can't have a post without a valid user.
@@ -94,6 +95,8 @@ async def create_db_and_tables():
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "sqlite" in str(engine.url):
+            await conn.run_sync(_ensure_posts_file_id_column)
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """
@@ -119,3 +122,13 @@ async def get_user_db(session: AsyncSession = Depends(get_async_session)):
     Adapter that connects our SQLAlchemy User model to the fastapi-users library.
     """
     yield SQLAlchemyUserDatabase(session, User)
+
+
+def _ensure_posts_file_id_column(sync_conn):
+    """
+    Keep older SQLite databases compatible after adding ImageKit file IDs.
+    """
+    inspector = inspect(sync_conn)
+    columns = {column["name"] for column in inspector.get_columns("posts")}
+    if "file_id" not in columns:
+        sync_conn.execute(text("ALTER TABLE posts ADD COLUMN file_id VARCHAR"))

@@ -5,6 +5,7 @@ services:
     runtime: docker
     plan: free # Free tier plan
     region: oregon # Closest to most users
+    healthCheckPath: /
     envVars:
       - key: DATABASE_URL
         fromDatabase:

@@ -77,11 +77,9 @@ async def upload_file(
     """
     How the Upload Process Works:
     1. **Temporary Storage**: We save the uploaded file to the local disk temporarily. 
-       WHY: Sending large files directly through memory can be risky; disks are safer and more scalable.
     2. **Cloud Hand-off**: We send that local file to ImageKit cloud storage.
     3. **Metadata Persistence**: We save the Cloud URL back into our SQLite database.
-    4. **Visibility**: We now store whether this asset should be 'Public' (visible to everyone) 
-       or remain in the user's private vault.
+    4. **Visibility**: We store whether this asset should be 'Public' or 'Private'.
     """
     temp_file_path = None
     try:
@@ -100,36 +98,41 @@ async def upload_file(
                 use_unique_file_name=True
             )
 
-        if upload_result:
-            # Step 3: Create a new database record
-            post = Post(
-                caption = caption,
-                url = upload_result.url,
-                file_type = upload_result.file_type,
-                file_name = upload_result.name,
-                user_id = user.id,
-                is_public = is_public
-            )
-            session.add(post)
-            await session.commit()
-            await session.refresh(post)
-            
-            return {
-                "id": str(post.id),
-                "caption": post.caption,
-                "url": post.url,
-                "file_type": post.file_type,
-                "file_name": post.file_name,
-                "is_public": post.is_public,
-                "created_at": post.created_at
-            }
+        # Step 3: Create a new database record
+        # Handle cases where is_public might arrive as a string ('true'/'false') from FormData
+        final_is_public = is_public
+        if isinstance(is_public, str):
+            final_is_public = is_public.lower() == "true"
+
+        post = Post(
+            file_id = upload_result.file_id,
+            caption = caption,
+            url = upload_result.url,
+            file_type = upload_result.file_type,
+            file_name = upload_result.name,
+            user_id = user.id,
+            is_public = final_is_public
+        )
+        session.add(post)
+        await session.commit()
+        await session.refresh(post)
+        
+        return {
+            "id": str(post.id),
+            "caption": post.caption,
+            "url": post.url,
+            "file_type": post.file_type,
+            "file_name": post.file_name,
+            "is_public": post.is_public,
+            "created_at": post.created_at
+        }
 
     except Exception as e:
         print(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
     
     finally:
-        # Step 4: Clean up the temporary file from the server disk
+        # Step 4: Clean up the temporary file
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
@@ -146,22 +149,23 @@ async def get_feed(
     """
     if mode == "public":
         # Fetch all public posts + their uploader emails
+        # Using .where(Post.is_public.is_(True)) is more resilient for SQLite/Postgres boolean types
         result = await session.execute(
             select(Post)
-            .options(selectinload(Post.user)) # Eagerly load user data
-            .where(Post.is_public == True)
+            .options(selectinload(Post.user))
+            .where(Post.is_public.is_(True))
             .order_by(Post.created_at.desc())
         )
     else:
         # Default: Fetch only the user's private vault
         result = await session.execute(
             select(Post)
-            .options(selectinload(Post.user)) # Eagerly load user data
+            .options(selectinload(Post.user))
             .where(Post.user_id == user.id)
             .order_by(Post.created_at.desc())
         )
     
-    posts = [row[0] for row in result.all()] 
+    posts = result.scalars().all() 
     
     posts_data = []
     for post in posts:
@@ -185,44 +189,71 @@ async def delete_post(
     user: User = Depends(current_active_user)
 ):
     """
-    Delete a post safely.
-    HOW: 
-    1. Convert the 'post_id' string into a proper 'UUID' object for database comparison.
-    2. AUTHORIZATION CHECK: We compare the 'user_id' stored on the post with the 'id' of the currently 
-       logged-in user. This ensures that only the owner can delete their files.
+    Permanent deletion of an asset.
     """
     try:
         post_uuid = uuid.UUID(post_id)
-        
-        # Look up the post in the database
         result = await session.execute(select(Post).where(Post.id == post_uuid))
         post = result.scalars().first()
         
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
         
-        # AUTHORIZATION CHECK: Prevent users from deleting each other's content
         if post.user_id != user.id and not user.is_superuser:
             raise HTTPException(status_code=403, detail="Not authorized to delete this post")
-        
+
+        if not post.file_id:
+            raise HTTPException(status_code=400, detail="Missing ImageKit file ID for this post")
+
+        # Delete the file from ImageKit first so we do not remove the DB row
+        # unless the cloud asset was actually removed.
+        image_kit.files.delete(file_id=post.file_id)
+
         await session.delete(post)
         await session.commit()
         
-        return {"success": True, "message": "Post deleted successfully"}
+        return {"success": True, "message": "Post deleted permanently"}
     
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Delete operation failed: {str(e)}")
 
+@app.patch("/posts/{post_id}/visibility")
+async def update_post_visibility(
+    post_id: str,
+    is_public: bool,
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user)
+):
+    """
+    Toggle visibility (Unshare/Share).
+    """
+    try:
+        post_uuid = uuid.UUID(post_id)
+        result = await session.execute(select(Post).where(Post.id == post_uuid))
+        post = result.scalars().first()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        if post.user_id != user.id and not user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not authorized to modify this post")
+        
+        post.is_public = is_public
+        await session.commit()
+        
+        status = "Public" if is_public else "Private"
+        return {"success": True, "message": f"Asset is now {status}"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Visibility update failed: {str(e)}")
+
 # --- Authentication Routers ---
-# These routes are automatically handled by fastapi-users to provide standard auth features:
-# - JWT login (returns an access token)
-# - Registration (validates email uniqueness and hashes passwords)
-# - User profile management (GET/PATCH)
 app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"])
 app.include_router(fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_reset_password_router(), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_verify_router(UserRead), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"])
-
