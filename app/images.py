@@ -16,12 +16,18 @@ from imagekitio import ImageKit
 # Load environment variables from the .env file 
 load_dotenv()
 
+IS_VERCEL = os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
+IMAGEKIT_PRIVATE_KEY = os.getenv("IMAGEKIT_PRIVATE_KEY")
+if not IMAGEKIT_PRIVATE_KEY:
+    if IS_VERCEL:
+        raise RuntimeError("IMAGEKIT_PRIVATE_KEY is required when running on Vercel.")
+    IMAGEKIT_PRIVATE_KEY = ""
+
 # Initialize the ImageKit client
 # The SDK uses your private key to authorize our backend to 'write' files to your account.
 # Note: public_key and url_endpoint are not used in the main ImageKit constructor in this version.
 image_kit = ImageKit(
-    private_key=os.getenv("IMAGEKIT_PRIVATE_KEY")
+    private_key=IMAGEKIT_PRIVATE_KEY
 )
-
 
 

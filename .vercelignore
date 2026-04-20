@@ -1,0 +1,10 @@
+.env
+.venv
+test.db
+__pycache__/
+static/dist/
+frontend/
+Dockerfile
+render.yaml
+new_frontend/node_modules/
+new_frontend/dist/
