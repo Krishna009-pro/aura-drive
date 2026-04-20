@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from contextlib import asynccontextmanager
 
 from app.images import image_kit 
@@ -69,6 +70,7 @@ async def root():
 async def upload_file(
     file: UploadFile = File(...),
     caption: str = Form(...),
+    is_public: bool = Form(False),
     session: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user)
 ):
@@ -77,19 +79,19 @@ async def upload_file(
     1. **Temporary Storage**: We save the uploaded file to the local disk temporarily. 
        WHY: Sending large files directly through memory can be risky; disks are safer and more scalable.
     2. **Cloud Hand-off**: We send that local file to ImageKit cloud storage.
-    3. **Metadata Persistence**: We save the Cloud URL back into our SQLite database, linked to the user's ID.
-    4. **Safety**: We use a 'try/finally' block to ensure the temporary file is deleted even if something crashes.
+    3. **Metadata Persistence**: We save the Cloud URL back into our SQLite database.
+    4. **Visibility**: We now store whether this asset should be 'Public' (visible to everyone) 
+       or remain in the user's private vault.
     """
     temp_file_path = None
     try:
-        # Step 1: Create a temporary file to store the upload before sending to ImageKit
+        # Step 1: Create a temporary file
         suffix = os.path.splitext(file.filename)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file_path = temp_file.name
             shutil.copyfileobj(file.file, temp_file)
         
-        # Step 2: Upload the temporary file to ImageKit cloud storage
-        # ImageKit handles CDN distribution and storage optimization for us.
+        # Step 2: Upload to ImageKit
         with open(temp_file_path, "rb") as f:
             upload_result = image_kit.files.upload(
                 file=f,
@@ -99,17 +101,18 @@ async def upload_file(
             )
 
         if upload_result:
-            # Step 3: Create a new database record for the post
+            # Step 3: Create a new database record
             post = Post(
                 caption = caption,
                 url = upload_result.url,
                 file_type = upload_result.file_type,
                 file_name = upload_result.name,
-                user_id = user.id 
+                user_id = user.id,
+                is_public = is_public
             )
             session.add(post)
             await session.commit()
-            await session.refresh(post) # Sync 'post' with any DB-generated fields (like created_at)
+            await session.refresh(post)
             
             return {
                 "id": str(post.id),
@@ -117,6 +120,7 @@ async def upload_file(
                 "url": post.url,
                 "file_type": post.file_type,
                 "file_name": post.file_name,
+                "is_public": post.is_public,
                 "created_at": post.created_at
             }
 
@@ -131,14 +135,32 @@ async def upload_file(
 
 @app.get("/feed")
 async def get_feed(
-    session: AsyncSession = Depends(get_async_session)
+    mode: str = "private",
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user)
 ):
     """
-    Retrieve all posts (assets) from the database.
-    HOW: We use SQLAlchemy's 'select' to fetch all records from the 'posts' table, 
-    ordering them so the most recent uploads appear at the top of the user's feed.
+    Retrieve assets based on the selected mode.
+    - **mode=private**: Returns only the personal assets of the logged-in user.
+    - **mode=public**: Returns all assets shared with the community.
     """
-    result = await session.execute(select(Post).order_by(Post.created_at.desc()))
+    if mode == "public":
+        # Fetch all public posts + their uploader emails
+        result = await session.execute(
+            select(Post)
+            .options(selectinload(Post.user)) # Eagerly load user data
+            .where(Post.is_public == True)
+            .order_by(Post.created_at.desc())
+        )
+    else:
+        # Default: Fetch only the user's private vault
+        result = await session.execute(
+            select(Post)
+            .options(selectinload(Post.user)) # Eagerly load user data
+            .where(Post.user_id == user.id)
+            .order_by(Post.created_at.desc())
+        )
+    
     posts = [row[0] for row in result.all()] 
     
     posts_data = []
@@ -149,8 +171,10 @@ async def get_feed(
             "url": post.url,
             "file_type": post.file_type,
             "file_name": post.file_name,
+            "is_public": post.is_public,
             "created_at": post.created_at,
-            "user_id": post.user_id 
+            "user_id": post.user_id,
+            "uploader_email": post.user.email if post.user else "Aura Member"
         })
     return {"posts": posts_data }
 

@@ -16,22 +16,14 @@ from typing import Optional
 # --- Post Schemas ---
 
 class createPost(BaseModel):
-    """
-    Schema for creating a new post.
-    HOW: The frontend sends a 'title' and 'description' as JSON. 
-    FastAPI uses this class to validate that both fields exist and are strings.
-    """
     title: str
     description: str
+    is_public: bool = False
 
 class responsePost(BaseModel):
-    """
-    Schema for the post data returned by our API.
-    HOW: This defines the 'shape' of the JSON the frontend receives. 
-    We can exclude internal database fields here if needed.
-    """
     title: str
     description: str
+    is_public: bool
 
 # --- User Schemas ---
 # These classes extend the 'fastapi-users' base schemas to integrate with our UUID primary key.

@@ -59,11 +59,13 @@ class Post(Base):
     file_type = Column(String, nullable=False) 
     file_name = Column(String, nullable=False) 
     
+    is_public = Column(Boolean, default=False)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # user: A helper property that lets us access the user object directly from a post.
-    # e.g., print(post.user.email)
-    user = relationship("User", back_populates="posts")
+    # We use lazy='selectin' to efficiently fetch user emails for the public feed.
+    user = relationship("User", back_populates="posts", lazy="selectin")
 
 # --- Engine & Session Setup ---
 

@@ -22,17 +22,22 @@ export const authApi = {
   },
   register: (email, password) => {
     return api.post('/auth/register', { email, password });
-  }
+  },
+  me: () => api.get('/users/me')
 };
 
 export const driveApi = {
-  getFeed: () => api.get('/feed'),
-  upload: (file, caption) => {
+  // mode can be 'private' (default) or 'public'
+  getFeed: (mode = 'private') => api.get(`/feed?mode=${mode}`),
+  
+  upload: (file, caption, isPublic = false) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('caption', caption);
+    formData.append('is_public', isPublic); // New field for visibility
     return api.post('/uploadfile', formData);
   },
+  
   deletePost: (id) => api.delete(`/posts/${id}`)
 };
 

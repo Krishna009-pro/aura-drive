@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Upload, Trash2, Folder, ShieldCheck, Mail, Lock, Plus, File } from 'lucide-react';
+import { 
+  LogOut, Upload, Trash2, Folder, ShieldCheck, Mail, 
+  Lock, Plus, File, Globe, User as UserIcon, LayoutGrid 
+} from 'lucide-react';
 import { authApi, driveApi } from './api';
 
 function App() {
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('aura_token'));
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+  
+  // App view state
+  const [feedMode, setFeedMode] = useState('private'); // 'private' or 'public'
   
   // Auth state
   const [authMode, setAuthMode] = useState('login');
@@ -18,12 +23,13 @@ function App() {
   // Upload state
   const [uploadFile, setUploadFile] = useState(null);
   const [caption, setCaption] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
 
   useEffect(() => {
     if (token) {
       loadFeed();
     }
-  }, [token]);
+  }, [token, feedMode]);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -32,7 +38,7 @@ function App() {
 
   const loadFeed = async () => {
     try {
-      const res = await driveApi.getFeed();
+      const res = await driveApi.getFeed(feedMode);
       setPosts(res.data.posts || []);
     } catch (err) {
       console.error(err);
@@ -47,6 +53,11 @@ function App() {
       if (authMode === 'login') {
         const res = await authApi.login(email, password);
         localStorage.setItem('aura_token', res.data.access_token);
+        
+        // Fetch user details to get the persistent ID for delete permissions
+        const userRes = await authApi.me();
+        localStorage.setItem('aura_token_id_hack', userRes.data.id);
+        
         setToken(res.data.access_token);
         showNotification('Welcome to Aura Drive');
       } else {
@@ -71,10 +82,11 @@ function App() {
     if (!uploadFile) return showNotification('Please select a file', 'error');
     try {
       setLoading(true);
-      await driveApi.upload(uploadFile, caption);
+      await driveApi.upload(uploadFile, caption, isPublic);
       showNotification('Asset stored securely');
       setUploadFile(null);
       setCaption('');
+      setIsPublic(false);
       loadFeed();
     } catch (err) {
       showNotification('Upload failed', 'error');
@@ -104,11 +116,41 @@ function App() {
         >
           AURA DRIVE
         </motion.div>
-        {token && (
-          <button onClick={logout} className="btn" style={{ color: 'var(--text-secondary)' }}>
-            <LogOut size={18} /> Sign Out
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          {token && (
+            <>
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '0.25rem' }}>
+                <button 
+                  onClick={() => setFeedMode('private')}
+                  className="btn" 
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    fontSize: '0.85rem',
+                    background: feedMode === 'private' ? 'var(--accent-color)' : 'transparent',
+                    color: feedMode === 'private' ? 'white' : 'var(--text-secondary)'
+                  }}
+                >
+                  <Lock size={14} /> My Vault
+                </button>
+                <button 
+                  onClick={() => setFeedMode('public')}
+                  className="btn" 
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    fontSize: '0.85rem',
+                    background: feedMode === 'public' ? 'var(--accent-color)' : 'transparent',
+                    color: feedMode === 'public' ? 'white' : 'var(--text-secondary)'
+                  }}
+                >
+                  <Globe size={14} /> Community
+                </button>
+              </div>
+              <button onClick={logout} className="btn" style={{ color: 'var(--text-secondary)' }}>
+                <LogOut size={18} />
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       <AnimatePresence mode="wait">
@@ -139,30 +181,14 @@ function App() {
                 <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Email Address</label>
                 <div style={{ position: 'relative' }}>
                   <Mail size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-                  <input 
-                    type="email" 
-                    className="input-field" 
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
-                    placeholder="name@company.com" 
-                    required 
-                    style={{ paddingLeft: '3rem' }}
-                  />
+                  <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" required style={{ paddingLeft: '3rem' }} />
                 </div>
               </div>
               <div style={{ marginBottom: '2rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Password</label>
                 <div style={{ position: 'relative' }}>
                   <Lock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-                  <input 
-                    type="password" 
-                    className="input-field" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
-                    placeholder="••••••••" 
-                    required 
-                    style={{ paddingLeft: '3rem' }}
-                  />
+                  <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required style={{ paddingLeft: '3rem' }} />
                 </div>
               </div>
               <button disabled={loading} className="btn btn-primary" style={{ width: '100%' }}>
@@ -176,10 +202,28 @@ function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
+            {/* Upload Section */}
             <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', padding: '2rem', marginBottom: '3rem' }}>
               <div>
                 <h2 style={{ marginBottom: '0.5rem' }}>Cloud Deposit</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Securely upload and manage your premium assets.</p>
+                <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div 
+                    onClick={() => setIsPublic(!isPublic)}
+                    style={{ 
+                      width: '40px', height: '24px', background: isPublic ? 'var(--accent-color)' : 'rgba(255,255,255,0.1)', 
+                      borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: '0.3s'
+                    }}
+                  >
+                    <motion.div 
+                      animate={{ x: isPublic ? 18 : 2 }}
+                      style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', marginTop: '2px' }} 
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.9rem', color: isPublic ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                    {isPublic ? <><Globe size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Public Link</> : <><Lock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Private Vault</>}
+                  </span>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div 
@@ -192,20 +236,24 @@ function App() {
                   </div>
                   <input type="file" id="file-input" style={{ display: 'none' }} onChange={e => setUploadFile(e.target.files[0])} />
                 </div>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  placeholder="Asset caption..." 
-                  value={caption} 
-                  onChange={e => setCaption(e.target.value)}
-                />
+                <input type="text" className="input-field" placeholder="Asset caption..." value={caption} onChange={e => setCaption(e.target.value)} />
                 <button onClick={handleUpload} disabled={loading} className="btn btn-primary">
                   {loading ? 'Moving data...' : <><Plus size={18} /> Upload to Aura</>}
                 </button>
               </div>
             </div>
 
-            <h2 style={{ marginBottom: '1.5rem' }}>Secure Assets</h2>
+            {/* Feed Section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {feedMode === 'public' ? <Globe size={24} /> : <ShieldCheck size={24} />}
+                {feedMode === 'public' ? 'Community Gallery' : 'Personal Vault'}
+              </h2>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                {posts.length} {posts.length === 1 ? 'Asset' : 'Assets'} 
+              </span>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '2rem' }}>
               <AnimatePresence>
                 {posts.map((post, index) => (
@@ -219,22 +267,38 @@ function App() {
                     className="glass-card"
                     style={{ overflow: 'hidden', cursor: 'default' }}
                   >
-                    <div style={{ height: '180px', overflow: 'hidden', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ height: '180px', overflow: 'hidden', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                       {post.file_type?.startsWith('image') ? (
                         <img src={post.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Asset" />
                       ) : (
                         <File size={48} style={{ color: 'var(--text-secondary)' }} />
                       )}
+                      {post.is_public && feedMode === 'private' && (
+                        <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'var(--accent-color)', borderRadius: '50%', padding: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+                          <Globe size={12} color="white" />
+                        </div>
+                      )}
                     </div>
                     <div style={{ padding: '1.2rem' }}>
                       <div style={{ fontWeight: 600, fontSize: '1.05rem', marginBottom: '0.5rem' }}>{post.caption || 'Untitled Asset'}</div>
+                      
+                      {feedMode === 'public' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', background: 'rgba(255,255,255,0.04)', padding: '0.4rem 0.6rem', borderRadius: '8px', width: 'fit-content' }}>
+                          <UserIcon size={12} />
+                          {post.uploader_email}
+                        </div>
+                      )}
+
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                        <Trash2 
-                          size={16} 
-                          onClick={() => handleDelete(post.id)}
-                          style={{ cursor: 'pointer', color: 'var(--error)', transition: 'transform 0.2s' }} 
-                        />
+                        {/* Only show delete button if it's the user's private vault OR they are the owner in public feed */}
+                        {(feedMode === 'private' || post.user_id === localStorage.getItem('aura_token_id_hack')) && (
+                          <Trash2 
+                            size={16} 
+                            onClick={() => handleDelete(post.id)}
+                            style={{ cursor: 'pointer', color: 'var(--error)', transition: 'transform 0.2s' }} 
+                          />
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -243,7 +307,7 @@ function App() {
               {posts.length === 0 && (
                 <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
                   <Folder size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                  <p>Your vault is currently empty.</p>
+                  <p>{feedMode === 'public' ? 'No community assets found yet.' : 'Your vault is currently empty.'}</p>
                 </div>
               )}
             </div>
