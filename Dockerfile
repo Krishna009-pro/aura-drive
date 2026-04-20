@@ -1,5 +1,6 @@
 # --- STAGE 1: Build the React Frontend ---
-FROM node:18-slim AS build-stage
+# Vite 8 requires Node.js 20.19+ (or 22.12+), so use a modern LTS image.
+FROM node:22-slim AS build-stage
 WORKDIR /app/new_frontend
 COPY new_frontend/package*.json ./
 RUN npm install
