@@ -29,6 +29,6 @@ COPY . .
 EXPOSE 8000
 
 # Command to run the application
-# We use Gunicorn with the Uvicorn worker for production performance and stability.
-# --bind 0.0.0.0:$PORT allows Render to dynamically assign a port.
-CMD ["gunicorn", "app.app:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+# We use Gunicorn with the Uvicorn worker for production.
+# Using 1 worker is recommended for Render Free tier to avoid DB initialization race conditions.
+CMD ["gunicorn", "app.app:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
