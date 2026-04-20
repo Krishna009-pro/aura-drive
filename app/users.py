@@ -1,5 +1,17 @@
 import os
+import uuid
+from typing import Optional
 from dotenv import load_dotenv
+from fastapi import Depends, Request
+from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    BearerTransport,
+    JWTStrategy,
+)
+
+# Local imports
+from app.db import User, get_user_db
 
 # Load security environment variables
 load_dotenv()
