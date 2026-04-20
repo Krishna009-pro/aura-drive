@@ -1,34 +1,36 @@
-# Use an official Python runtime as a parent image
-FROM python:3.12-slim
+# --- STAGE 1: Build the React Frontend ---
+FROM node:18-slim AS build-stage
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
 
-# Set environment variables
-# PYTHONDONTWRITEBYTECODE: Prevents Python from writing .pyc files to disc
-# PYTHONUNBUFFERED: Prevents Python from buffering stdout and stderr
+# --- STAGE 2: Build the FastAPI Backend ---
+FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Set the working directory in the container
 WORKDIR /app
 
 # Install system dependencies
-# libpq-dev is needed for the psycopg2-binary driver
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-# We copy the pyproject.toml first to leverage Docker cache
 COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
-# Copy the rest of the application code
+# Copy the rest of the backend code
 COPY . .
 
-# Expose the port that the app runs on
+# Copy the pre-built React frontend from Stage 1
+# We copy it into static/dist since FastAPI is configured to serve from there.
+COPY --from=build-stage /app/static/dist ./static/dist
+
 EXPOSE 8000
 
-# Command to run the application
-# We use Gunicorn with the Uvicorn worker for production.
-# Using 1 worker is recommended for Render Free tier to avoid DB initialization race conditions.
+# Command to run the application using Gunicorn
 CMD ["gunicorn", "app.app:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]

@@ -53,14 +53,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (HTML, CSS, JS) from the 'static' directory
-# WHY: This allows the backend to host the frontend directly, making deployment simpler.
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Serve the compiled React frontend from the 'static/dist' directory
+# WHY: This allows the backend to host the modern React app directly.
+# NOTE: You must run 'npm run build' in the frontend folder to generate this folder.
+app.mount("/static", StaticFiles(directory="static/dist"), name="static")
 
 @app.get("/")
 async def root():
     """
-    Redirect the root URL to the frontend UI for a seamless user experience.
+    Redirect the root URL to the React index.html.
     """
     return RedirectResponse(url="/static/index.html")
 
